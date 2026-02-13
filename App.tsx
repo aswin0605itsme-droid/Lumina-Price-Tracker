@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
-import { ComparisonProvider } from './context/ComparisonContext';
+import React, { useState, useEffect } from 'react';
+import { ComparisonProvider, useComparison } from './context/ComparisonContext';
 import ComparisonTable from './components/ComparisonTable';
 import ProductCard from './components/ProductCard';
 import ChatBot from './components/ChatBot';
 import ImageAnalyzer from './components/ImageAnalyzer';
 import { useSearchHistory } from './hooks/useSearchHistory';
-import { searchProductsWithGemini, getQuickAnswer } from './services/geminiService';
+import { searchProductsWithGemini, getQuickAnswer, getRecommendations } from './services/geminiService';
 import { Product } from './types';
-import { Search, History, Zap, Sparkles, Globe, Loader2 } from 'lucide-react';
+import { Search, History, Zap, Sparkles, Globe, Loader2, Lightbulb } from 'lucide-react';
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$', label: 'USD ($)' },
@@ -17,6 +17,72 @@ const CURRENCIES = [
   { code: 'JPY', symbol: '¥', label: 'JPY (¥)' },
   { code: 'CAD', symbol: 'C$', label: 'CAD (C$)' },
 ];
+
+const RecommendationsSection = ({ history, currency }: { history: string[], currency: string }) => {
+    const { products: comparedProducts } = useComparison();
+    const [recommendations, setRecommendations] = useState<Product[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [loadedOnce, setLoadedOnce] = useState(false);
+
+    // Fetch recommendations when searching stops or comparison changes, 
+    // but debounce/limit to avoid too many calls.
+    // For this demo, we'll expose a button or trigger on significant changes.
+    // Let's auto-trigger if we have history but no recs, or provide a button.
+    
+    const fetchRecs = async () => {
+        setLoading(true);
+        const recs = await getRecommendations(history, comparedProducts, currency);
+        setRecommendations(recs);
+        setLoading(false);
+        setLoadedOnce(true);
+    };
+
+    // Auto-fetch initial recommendations if history exists
+    useEffect(() => {
+        if (history.length > 0 && !loadedOnce) {
+            fetchRecs();
+        }
+    }, [history.length, loadedOnce]);
+
+    if (history.length === 0 && recommendations.length === 0) return null;
+
+    return (
+        <section className="space-y-4 pt-8 border-t border-white/10">
+            <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                    <Lightbulb className="text-yellow-400" />
+                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-yellow-200 to-amber-400">
+                        AI Picks for You
+                    </span>
+                </h2>
+                <button 
+                    onClick={fetchRecs}
+                    disabled={loading}
+                    className="text-sm px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-blue-300 transition-colors flex items-center gap-2"
+                >
+                    {loading && <Loader2 size={14} className="animate-spin" />}
+                    Refresh
+                </button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {loading && !recommendations.length ? (
+                    [...Array(4)].map((_, i) => (
+                        <div key={i} className="h-80 rounded-2xl bg-white/5 animate-pulse border border-white/10" />
+                    ))
+                ) : recommendations.length > 0 ? (
+                    recommendations.map((p) => (
+                        <ProductCard key={p.id} product={p} currencyCode={currency} isRecommendation />
+                    ))
+                ) : (
+                    <div className="col-span-full text-center py-8 text-gray-500 bg-white/5 rounded-xl border border-white/5 border-dashed">
+                        <p>No recommendations yet. Start searching to get personalized picks!</p>
+                    </div>
+                )}
+            </div>
+        </section>
+    );
+}
 
 // Wrapper component to use hooks
 const Dashboard = () => {
@@ -169,6 +235,9 @@ const Dashboard = () => {
             </h2>
             <ComparisonTable currencyCode={currency} />
         </section>
+
+        {/* Recommendations Section */}
+        <RecommendationsSection history={history} currency={currency} />
 
         <ChatBot />
       </div>

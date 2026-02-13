@@ -9,14 +9,8 @@ const cleanJson = (text: string) => {
   return text.replace(/^```json\n/, '').replace(/\n```$/, '');
 };
 
-export const searchProductsWithGemini = async (query: string, currency: string = 'USD'): Promise<Product[]> => {
-  if (!apiKey) {
-    console.error("API Key is missing");
-    return [];
-  }
-
-  // Define schema for structured product output
-  const productSchema = {
+// Shared Schema
+const productSchema = {
     type: Type.ARRAY,
     items: {
       type: Type.OBJECT,
@@ -42,6 +36,12 @@ export const searchProductsWithGemini = async (query: string, currency: string =
     },
   };
 
+export const searchProductsWithGemini = async (query: string, currency: string = 'USD'): Promise<Product[]> => {
+  if (!apiKey) {
+    console.error("API Key is missing");
+    return [];
+  }
+
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -49,8 +49,8 @@ export const searchProductsWithGemini = async (query: string, currency: string =
       
       Requirements:
       1. Prices MUST be in ${currency} (numeric value only).
-      2. Find ACTUAL product image URLs from the search results.
-      3. CRITICAL: If a real image URL cannot be found, use this specific fallback format: "https://image.pollinations.ai/prompt/{exact_product_name_encoded}?width=400&height=400&nologo=true". Do not use placeholder.com or random picsum images.
+      2. Find ACTUAL product image URLs.
+      3. CRITICAL: If a real image URL cannot be found, use this specific fallback format: "https://image.pollinations.ai/prompt/product photo of {exact_product_name_encoded} studio lighting?width=400&height=400&nologo=true".
       4. Return valid JSON matching the schema.`,
       config: {
         tools: [{ googleSearch: {} }],
@@ -65,17 +65,63 @@ export const searchProductsWithGemini = async (query: string, currency: string =
     // Normalize specs for the UI
     return products.map(p => ({
         ...p,
-        // Ensure numeric values in specs are parsed as numbers where possible for comparison
-        specs: Object.entries(p.specs).reduce((acc, [key, val]) => {
-            const num = parseFloat(val as string);
-            acc[key] = !isNaN(num) && (val as string).match(/^\d+(\.\d+)?$/) ? num : val;
-            return acc;
-        }, {} as Record<string, string | number>)
+        specs: normalizeSpecs(p.specs)
     }));
   } catch (error) {
     console.error("Gemini Search Error:", error);
     return [];
   }
+};
+
+export const getRecommendations = async (history: string[], comparedProducts: Product[], currency: string = 'USD'): Promise<Product[]> => {
+    if (!apiKey) return [];
+
+    const context = {
+        recentSearches: history.slice(0, 3).join(", "),
+        comparedItems: comparedProducts.map(p => p.name).join(", ")
+    };
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: `The user is interested in these topics: [${context.recentSearches}]. 
+            They are currently comparing: [${context.comparedItems}].
+            
+            Based on this, recommend 4 NEW products available in ${currency} that they might like. 
+            Do not repeat products they are already comparing.
+            If history is empty, suggest 4 trending tech gadgets.
+            
+            Requirements:
+            1. Prices in ${currency}.
+            2. High quality product images (use pollinations.ai fallback if real ones aren't found).
+            3. Return valid JSON.`,
+            config: {
+                tools: [{ googleSearch: {} }],
+                responseMimeType: 'application/json',
+                responseSchema: productSchema
+            }
+        });
+
+        const jsonText = response.text || "[]";
+        const products = JSON.parse(cleanJson(jsonText)) as Product[];
+        return products.map(p => ({
+            ...p,
+            specs: normalizeSpecs(p.specs)
+        }));
+
+    } catch (e) {
+        console.error("Recommendation Error", e);
+        return [];
+    }
+};
+
+// Helper to normalize spec values
+const normalizeSpecs = (specs: Record<string, string | number>) => {
+    return Object.entries(specs).reduce((acc, [key, val]) => {
+        const num = parseFloat(val as string);
+        acc[key] = !isNaN(num) && (val as string).match(/^\d+(\.\d+)?$/) ? num : val;
+        return acc;
+    }, {} as Record<string, string | number>);
 };
 
 export const analyzeImageWithGemini = async (base64Image: string): Promise<string> => {
@@ -106,7 +152,7 @@ export const chatWithGemini = async (history: { role: string, parts: { text: str
         const config: any = {};
         
         if (useThinking) {
-            config.thinkingConfig = { thinkingBudget: 16000 }; // Adjusted budget
+            config.thinkingConfig = { thinkingBudget: 16000 };
         }
 
         const chat = ai.chats.create({
@@ -126,7 +172,6 @@ export const chatWithGemini = async (history: { role: string, parts: { text: str
 export const getQuickAnswer = async (query: string): Promise<string> => {
     if (!apiKey) return "API Key missing.";
     try {
-        // Fast response model - using gemini-3-flash-preview for basic text tasks
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: query,

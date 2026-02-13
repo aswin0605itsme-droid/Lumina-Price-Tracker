@@ -12,7 +12,7 @@ interface ComparisonContextType {
 
 const ComparisonContext = createContext<ComparisonContextType | undefined>(undefined);
 
-export const ComparisonProvider = ({ children }: { children: ReactNode }) => {
+export const ComparisonProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [products, setProducts] = useState<Product[]>([]);
 
   const addToComparison = (product: Product) => {

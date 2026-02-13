@@ -1,6 +1,7 @@
 import React from 'react';
 import { useComparison } from '../context/ComparisonContext';
 import { X, Check } from 'lucide-react';
+import ImageWithLoader from './ImageWithLoader';
 
 interface ComparisonTableProps {
     currencyCode?: string;
@@ -18,7 +19,7 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({ currencyCode = 'USD' 
   }
 
   // Collect all unique spec keys
-  const allSpecKeys = Array.from(
+  const allSpecKeys: string[] = Array.from(
     new Set(products.flatMap((p) => Object.keys(p.specs)))
   );
 
@@ -28,12 +29,6 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({ currencyCode = 'USD' 
       currency: currencyCode,
       maximumFractionDigits: 0
     }).format(price);
-  };
-
-  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>, productName: string) => {
-    const target = e.currentTarget;
-    target.onerror = null;
-    target.src = `https://image.pollinations.ai/prompt/${encodeURIComponent(productName)}?width=200&height=200&nologo=true`;
   };
 
   // Helper to determine highlight color
@@ -74,12 +69,14 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({ currencyCode = 'USD' 
                   <X size={16} />
                 </button>
                 <div className="flex flex-col items-center gap-2">
-                  <img 
-                    src={product.imageUrl} 
-                    alt={product.name} 
-                    className="w-16 h-16 object-contain rounded-lg bg-black/20 p-1"
-                    onError={(e) => handleImageError(e, product.name)}
-                  />
+                  <div className="w-16 h-16 rounded-lg bg-black/20 p-1 overflow-hidden">
+                      <ImageWithLoader 
+                        src={product.imageUrl} 
+                        alt={product.name}
+                        productName={product.name}
+                        className="w-full h-full object-contain"
+                      />
+                  </div>
                   <span className="font-semibold text-white text-center text-sm line-clamp-2">{product.name}</span>
                 </div>
               </th>
@@ -107,13 +104,10 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({ currencyCode = 'USD' 
               <td className="p-4 border-b border-white/10 font-medium text-gray-200 sticky left-0 bg-slate-900/80 backdrop-blur-sm z-10 capitalize">{key}</td>
               {products.map((product) => {
                 const val = product.specs[key] ?? '-';
-                const allValues = products.map(p => p.specs[key] ?? -1);
-                // Check if the value is a number for highlighting logic
-                const isNum = typeof val === 'number';
-                // If the value string contains a number (e.g., "8GB"), try to parse it for logic, but display original
-                let numericVal = val;
-                if (!isNum && typeof val === 'string') {
-                    const match = val.match(/(\d+)/);
+                // Try to parse number for sorting/highlighting
+                let numericVal: number | string = val;
+                if (typeof val === 'string') {
+                    const match = val.match(/(\d+(\.\d+)?)/);
                     if (match) numericVal = parseFloat(match[0]);
                 }
 
@@ -121,7 +115,7 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({ currencyCode = 'USD' 
                     const v = p.specs[key];
                     if (typeof v === 'number') return v;
                     if (typeof v === 'string') {
-                         const m = v.match(/(\d+)/);
+                         const m = v.match(/(\d+(\.\d+)?)/);
                          return m ? parseFloat(m[0]) : -1;
                     }
                     return -1;

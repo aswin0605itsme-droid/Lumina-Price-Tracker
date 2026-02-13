@@ -2,13 +2,15 @@ import React from 'react';
 import { Product } from '../types';
 import { useComparison } from '../context/ComparisonContext';
 import { ShoppingBag, Plus, Check } from 'lucide-react';
+import ImageWithLoader from './ImageWithLoader';
 
 interface ProductCardProps {
   product: Product;
   currencyCode?: string;
+  isRecommendation?: boolean;
 }
 
-const ProductCard: React.FC<ProductCardProps> = ({ product, currencyCode = 'USD' }) => {
+const ProductCard: React.FC<ProductCardProps> = ({ product, currencyCode = 'USD', isRecommendation = false }) => {
   const { addToComparison, removeFromComparison, isInComparison } = useComparison();
   const isCompared = isInComparison(product.id);
 
@@ -28,21 +30,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, currencyCode = 'USD'
     }).format(price);
   };
 
-  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-    const target = e.currentTarget;
-    // Prevent infinite loop if the fallback also fails
-    target.onerror = null; 
-    // Fallback to generative image based on product name
-    target.src = `https://image.pollinations.ai/prompt/${encodeURIComponent(product.name)}?width=400&height=400&nologo=true`;
-  };
-
   return (
-    <div className="group relative bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl overflow-hidden hover:bg-white/15 transition-all duration-300 hover:scale-[1.02] shadow-xl">
+    <div className={`group relative bg-white/10 backdrop-blur-md border rounded-2xl overflow-hidden hover:bg-white/15 transition-all duration-300 hover:scale-[1.02] shadow-xl flex flex-col ${isRecommendation ? 'border-yellow-500/20 hover:border-yellow-500/40' : 'border-white/20'}`}>
       <div className="relative aspect-square overflow-hidden bg-black/40">
-        <img 
+        <ImageWithLoader 
           src={product.imageUrl} 
           alt={product.name} 
-          onError={handleImageError}
+          productName={product.name}
           className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-500 p-4"
         />
         <div className="absolute top-3 right-3">
@@ -50,9 +44,16 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, currencyCode = 'USD'
             {product.retailer}
           </span>
         </div>
+        {isRecommendation && (
+            <div className="absolute top-3 left-3">
+                 <span className="px-2 py-1 bg-yellow-500/20 backdrop-blur-sm text-xs text-yellow-200 rounded-full border border-yellow-500/30">
+                    AI Pick
+                </span>
+            </div>
+        )}
       </div>
 
-      <div className="p-5 flex flex-col h-[calc(100%-aspect-square)]">
+      <div className="p-5 flex flex-col flex-1">
         <h3 className="text-lg font-bold text-white mb-1 truncate" title={product.name}>{product.name}</h3>
         <p className="text-2xl font-bold text-green-400 mb-4">{formatPrice(product.price)}</p>
         
